@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teachable Machine Classifier (eXco-p5N5)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #f4f6f9;
+      color: #1f2937;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 480px;
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+      text-align: center;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.4rem;
+    }
+    p.subtitle {
+      margin: 0 0 20px;
+      font-size: 0.9rem;
+      color: #6b7280;
+    }
+    button {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    button:hover:not(:disabled) {
+      background: #1d4ed8;
+    }
+    button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+    #status {
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: #4b5563;
+      min-height: 1.2em;
+    }
+    #webcam-container {
+      margin: 20px auto 0;
+      width: 280px;
+      height: 280px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #111827;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #webcam-container canvas {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover;
+    }
+    #label-container {
+      margin-top: 20px;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .prediction-row {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .prediction-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.92rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .bar-track {
+      width: 100%;
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      background: #2563eb;
+      border-radius: 999px;
+      transition: width 0.12s linear;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Teachable Machine Classifier</h1>
+    <p class="subtitle">Model ID: <code>eXco-p5N5</code></p>
+
+    <button id="start-btn" type="button" onclick="init()">Start Webcam</button>
+    <div id="status">Click "Start Webcam" and allow camera access.</div>
+
+    <div id="webcam-container"></div>
+    <div id="label-container"></div>
+  </div>
+
+  <!-- TensorFlow.js & Teachable Machine Image Library -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+  <script>
+    const MODEL_URL = "https://teachablemachine.withgoogle.com/models/eXco-p5N5/";
+
+    let model, webcam, labelContainer, maxPredictions;
+    let isRunning = false;
+
+    async function init() {
+      const startBtn = document.getElementById("start-btn");
+      const statusEl = document.getElementById("status");
+
+      startBtn.disabled = true;
+      statusEl.textContent = "Loading model...";
+
+      try {
+        const modelJSON = MODEL_URL + "model.json";
+        const metadataJSON = MODEL_URL + "metadata.json";
+
+        model = await tmImage.load(modelJSON, metadataJSON);
+        maxPredictions = model.getTotalClasses();
+
+        statusEl.textContent = "Requesting webcam access...";
+        const flip = true; // Flip horizontal feed like Teachable Machine preview
+        webcam = new tmImage.Webcam(280, 280, flip);
+        await webcam.setup();
+        await webcam.play();
+
+        const webcamContainer = document.getElementById("webcam-container");
+        webcamContainer.innerHTML = "";
+        webcamContainer.appendChild(webcam.canvas);
+
+        setupLabelUI();
+        statusEl.textContent = "Running live predictions...";
+        isRunning = true;
+        window.requestAnimationFrame(loop);
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Error loading model or webcam. Check console for details.";
+        startBtn.disabled = false;
+      }
+    }
+
+    function setupLabelUI() {
+      labelContainer = document.getElementById("label-container");
+      labelContainer.innerHTML = "";
+
+      for (let i = 0; i < maxPredictions; i++) {
+        const row = document.createElement("div");
+        row.className = "prediction-row";
+
+        const header = document.createElement("div");
+        header.className = "prediction-header";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "class-name";
+        nameSpan.textContent = `Class ${i + 1}`;
+
+        const probSpan = document.createElement("span");
+        probSpan.className = "class-prob";
+        probSpan.textContent = "0%";
+
+        header.appendChild(nameSpan);
+        header.appendChild(probSpan);
+
+        const track = document.createElement("div");
+        track.className = "bar-track";
+
+        const fill = document.createElement("div");
+        fill.className = "bar-fill";
+
+        track.appendChild(fill);
+        row.appendChild(header);
+        row.appendChild(track);
+        labelContainer.appendChild(row);
+      }
+    }
+
+    async function loop() {
+      if (!isRunning) return;
+      webcam.update();
+      await predict();
+      window.requestAnimationFrame(loop);
+    }
+
+    async function predict() {
+      const prediction = await model.predict(webcam.canvas);
+
+      for (let i = 0; i < maxPredictions; i++) {
+        const item = prediction[i];
+        const percent = (item.probability * 100).toFixed(1);
+        const row = labelContainer.children[i];
+
+        row.querySelector(".class-name").textContent = item.className;
+        row.querySelector(".class-prob").textContent = `${percent}%`;
+        row.querySelector(".bar-fill").style.width = `${percent}%`;
+      }
+    }
+  </script>
+</body>
+</html>
